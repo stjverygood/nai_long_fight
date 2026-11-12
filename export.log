@@ -1,0 +1,74 @@
+WorkerThreadPool: 14 threads, 10 max low-priority.
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+TextServer: Added interface "Dummy"
+TextServer: Added interface "ICU / HarfBuzz / Graphite (Built-in)"
+Using "default" pen tablet driver...
+
+TextServer: Primary interface set to: "ICU / HarfBuzz / Graphite (Built-in)".
+.NET: Initializing module...
+Found hostfxr: C:/Program Files/dotnet/host/fxr/10.0.13/hostfxr.dll
+.NET: hostfxr initialized
+.NET: GodotPlugins initialized
+.NET: Failed to load project assembly
+CORE API HASH: 3677103882
+EDITOR API HASH: 1629494564
+SceneTreeFTI: traversal method DEFAULT
+Loading resource: C:/Users/stj/AppData/Roaming/Godot/editor_settings-4.7.tres remapped: C:/Users/stj/AppData/Roaming/Godot/editor_settings-4.7.tres
+Completed load for: 'C:/Users/stj/AppData/Roaming/Godot/editor_settings-4.7.tres' remapped 'C:/Users/stj/AppData/Roaming/Godot/editor_settings-4.7.tres' at thread -1
+EditorSettings: Load OK!
+EditorTheme: Generating new theme for the config '3810048042'.
+EditorTheme: Generating new icons.
+EditorTheme: Generating new fonts.
+EditorTheme: Generating new styles.
+Found .NET Sdk version '10.0.402': C:\Program Files\dotnet\sdk\10.0.402
+Loading resource: C:/Users/stj/AppData/Local/Godot/editor_doc_cache-4.7.res remapped: C:/Users/stj/AppData/Local/Godot/editor_doc_cache-4.7.res
+Loaded system CA certificates
+Completed load for: 'C:/Users/stj/AppData/Local/Godot/editor_doc_cache-4.7.res' remapped 'C:/Users/stj/AppData/Local/Godot/editor_doc_cache-4.7.res' at thread -1
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Started 项目初始化 (5 steps)[39m[0m
+[   0% ] [90m[1mfirst_scan_filesystem[22m | 正在扫描文件结构……[39m[0m
+[  16% ] [90m[1mfirst_scan_filesystem[22m | 正在加载全局类名……[39m[0m
+[  33% ] [90m[1mfirst_scan_filesystem[22m | 正在校验 GDExtension……[39m[0m
+[  50% ] [90m[1mfirst_scan_filesystem[22m | 正在创建自动加载脚本……[39m[0m
+[  66% ] [90m[1mfirst_scan_filesystem[22m | 正在初始化插件……[39m[0m
+[  83% ] [90m[1mfirst_scan_filesystem[22m | 正在启动文件扫描……[39m[0m
+[92m[ DONE ][39m [1mfirst_scan_filesystem[22m
+[0m
+[   0% ] [90m[1mdotnet_publish_project[22m | Started Publishing .NET project... (1 steps)[39m[0m
+[   0% ] [90m[1mdotnet_publish_project[22m | Running dotnet publish[39m[0m
+Running:  "C:\Program Files\dotnet\dotnet.EXE" publish "D:/_ai/nai_long_fight/Nai Long Fight.csproj" -c ExportRelease -r win-x64 --self-contained true -v normal -l:GodotTools.BuildLogger.GodotBuildLogger,D:/dev/Godot_v4.7.2-stable_mono_win64/GodotSharp/Tools\GodotTools.BuildLogger.dll;C:/Users/stj/AppData/Roaming/Godot/mono/build_logs\910b67821ed6617682e364139f997bb1_ExportRelease -p:GodotTargetPlatform=windows -o C:\Users\stj\AppData\Local\Temp\godot-publish-dotnet\26776-ExportRelease-win-x64
+dotnet publish exited with code: 1. Log file: C:/Users/stj/AppData/Roaming/Godot/mono/build_logs\910b67821ed6617682e364139f997bb1_ExportRelease\msbuild_log.txt
+[92m[ DONE ][39m [1mdotnet_publish_project[22m
+[0m
+ERROR: Export .NET Project: Failed to build project. Check MSBuild panel for details.
+   at: add_message (./editor/export/editor_export_platform.h:270)
+   C# backtrace (most recent call first):
+       [0] void Godot.EditorNativeCalls.godot_icall_3_490(nint, nint, int, string, string) (/root/godot/modules/mono/glue/GodotSharp/GodotSharpEditor/Generated/EditorNativeCalls.cs:145)
+       [1] void Godot.EditorExportPlatform.AddMessage(Godot.EditorExportPlatform+ExportMessageType, string, string) (/root/godot/modules/mono/glue/GodotSharp/GodotSharpEditor/Generated/GodotObjects/EditorExportPlatform.cs:295)
+       [2] void GodotTools.Export.ExportPlugin.AddExceptionMessage(Godot.EditorExportPlatform, System.Exception) (/root/godot/modules/mono/editor/GodotTools/GodotTools/Export/ExportPlugin.cs:113)
+       [3] void GodotTools.Export.ExportPlugin._ExportBegin(System.String[], bool, string, uint) (/root/godot/modules/mono/editor/GodotTools/GodotTools/Export/ExportPlugin.cs:162)
+       [4] bool Godot.EditorExportPlugin.InvokeGodotClassMethod(Godot.NativeInterop.godot_string_name&, Godot.NativeInterop.NativeVariantPtrArgs, Godot.NativeInterop.godot_variant&) (/root/godot/modules/mono/glue/GodotSharp/GodotSharpEditor/Generated/GodotObjects/EditorExportPlugin.cs:722)
+       [5] bool GodotTools.Export.ExportPlugin.InvokeGodotClassMethod(Godot.NativeInterop.godot_string_name&, Godot.NativeInterop.NativeVariantPtrArgs, Godot.NativeInterop.godot_variant&) (/root/godot/modules/mono/editor/GodotTools/GodotTools/Godot.SourceGenerators/Godot.SourceGenerators.ScriptMethodsGenerator/GodotTools.Export.ExportPlugin_ScriptMethods.generated.cs:140)
+       [6] Godot.NativeInterop.godot_bool Godot.Bridge.CSharpInstanceBridge.Call(nint, Godot.NativeInterop.godot_string_name*, Godot.NativeInterop.godot_variant**, int, Godot.NativeInterop.godot_variant_call_error*, Godot.NativeInterop.godot_variant*) (/root/godot/modules/mono/glue/GodotSharp/GodotSharp/Core/Bridge/CSharpInstanceBridge.cs:24)
+System.InvalidOperationException: Failed to build project. Check MSBuild panel for details.
+   at GodotTools.Export.ExportPlugin._ExportBeginImpl(String[] features, Boolean isDebug, String path, Int64 flags) in /root/godot/modules/mono/editor/GodotTools/GodotTools/Export/ExportPlugin.cs:line 289
+   at GodotTools.Export.ExportPlugin._ExportBegin(String[] features, Boolean isDebug, String path, UInt32 flags) in /root/godot/modules/mono/editor/GodotTools/GodotTools/Export/ExportPlugin.cs:line 162
+[   0% ] [90m[1msavepack[22m | Started 打包中 (102 steps)[39m[0m
+[   1% ] [90m[1msavepack[22m | 正在保存文件：res://.godot/exported/133200997/export-3070c538c03ee49b7677ff960a3f5195-main.scn[39m[0m
+[  50% ] [90m[1msavepack[22m | 正在保存文件：res://NaiLongFight.cs[39m[0m
+[  50% ] [90m[1msavepack[22m | 正在保存文件：res://main.tscn.remap[39m[0m
+[  50% ] [90m[1msavepack[22m | 正在保存文件：res://.godot/global_script_class_cache.cfg[39m[0m
+[  50% ] [90m[1msavepack[22m | 正在保存文件：res://.godot/uid_cache.bin[39m[0m
+[  50% ] [90m[1msavepack[22m | 正在保存文件：res://project.binary[39m[0m
+[92m[ DONE ][39m [1msavepack[22m
+[0m
+WARNING: Project export for preset "Windows Desktop" completed with warnings.
+   at: _fs_changed (editor/editor_node.cpp:1422)
+Script docs haven't been properly loaded or regenerated, so don't save them to disk.
+EditorSettings: Save OK!
+Unloading: Disposing tracked instances...
+Unloading: Finished disposing tracked instances.
+XR: Clearing primary interface
+XR: Removed interface "Native mobile"
+XR: Removed interface "OpenXR"
+Orphan StringName: Node (static: 3, total: 4)
+StringName: 1 unclaimed string names at exit.
