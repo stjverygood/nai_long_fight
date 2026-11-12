@@ -1,10 +1,16 @@
 # Nai Long Fight
 
-一个使用 Godot 4 制作的 3D 自动战斗观战原型。选择 2–8 个势力后，各势力会从自己的据点持续随机派出士兵，自动向战场推进并攻击其他阵营。
+一个使用 Godot 4 .NET / C# 制作的 3D 自动战斗观战原型。选择 2–8 个势力后，各势力会从自己的据点持续随机派出士兵，自动向战场推进并攻击其他阵营。
 
 ## 运行
 
-使用 Godot 4 打开本目录中的 `project.godot`，运行主场景即可。
+使用 Godot 4.7.2 .NET 版打开本目录中的 `project.godot`，运行主场景即可。
+
+重新导出 Windows 版本：
+
+```powershell
+godot --headless --path . --export-release "Windows Desktop" build/NaiLongFight.exe
+```
 
 ## 操作
 
