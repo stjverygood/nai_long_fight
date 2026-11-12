@@ -127,9 +127,16 @@ public partial class NaiLongFight : Node3D
     private void BuildUi()
     {
         var layer = new CanvasLayer(); AddChild(layer);
-        var panel = new PanelContainer { Position = new Vector2(24, 24), CustomMinimumSize = new Vector2(460, 0) };
+        var panel = new PanelContainer { Position = new Vector2(24, 66), CustomMinimumSize = new Vector2(460, 0) };
         var style = new StyleBoxFlat { BgColor = new Color("#e8101822"), BorderColor = new Color("#405363"), ContentMarginLeft = 18, ContentMarginRight = 18, ContentMarginTop = 16, ContentMarginBottom = 16 };
         style.SetBorderWidthAll(1); style.SetCornerRadiusAll(12); panel.AddThemeStyleboxOverride("panel", style); layer.AddChild(panel);
+        var toggle = new Button { Text = "收起面板  ▴", Position = new Vector2(24, 24), CustomMinimumSize = new Vector2(126, 34) };
+        toggle.Pressed += () =>
+        {
+            panel.Visible = !panel.Visible;
+            toggle.Text = panel.Visible ? "收起面板  ▴" : "展开面板  ▾";
+        };
+        layer.AddChild(toggle);
         var box = new VBoxContainer { Theme = null }; box.AddThemeConstantOverride("separation", 12); panel.AddChild(box);
         var title = new Label { Text = "LONG FIGHT  /  自动战场" }; title.AddThemeFontSizeOverride("font_size", 23); box.AddChild(title);
         var subtitle = new Label { Text = "势力自行扩军、遭遇与争夺战场" }; subtitle.AddThemeColorOverride("font_color", new Color("#9aafbe")); box.AddChild(subtitle);
