@@ -6,9 +6,10 @@ public partial class NaiLongFight : Node3D
 {
     private static readonly Color[] Colors = [new("#ff5d73"), new("#55a7ff"), new("#ffc857"), new("#68e0a3"), new("#b889ff"), new("#ff914d"), new("#55d8d0"), new("#f47cc4")];
     private static readonly string[] Names = ["赤焰", "苍蓝", "金戈", "青岚", "紫霄", "烈阳", "碧海", "绯月"];
-    private const float Arena = 32f;
+    private const float Arena = 68f;
     private readonly List<Army> _armies = [];
     private readonly List<Soldier> _units = [];
+    private readonly List<Crystal> _crystals = [];
     private readonly RandomNumberGenerator _rng = new();
     private readonly FastNoiseLite _terrainNoise = new();
     private Node3D _terrainRoot = null!;
@@ -24,6 +25,7 @@ public partial class NaiLongFight : Node3D
 
     private enum SoldierType { Infantry, Archer, Cavalry, Heavy }
     private enum Tactic { GatherAndCharge, WaveAttack, HoldAndCounter }
+    private enum Strategy { CaptureCrystals, AttackRival, DefendCrystal, Regroup }
 
     private sealed class Army(int id, string name, Color color, Vector3 home, Tactic tactic, int rallyGoal)
     {
@@ -33,15 +35,30 @@ public partial class NaiLongFight : Node3D
         public Vector3 Home { get; } = home;
         public Tactic BattleTactic { get; } = tactic;
         public int RallyGoal { get; } = rallyGoal;
+        public Strategy CurrentStrategy = Strategy.CaptureCrystals;
+        public float DecisionClock;
         public int LastLaunchedCount;
         public int Kills;
         public int UnitCount;
+        public bool Alive = true;
     }
 
-    private sealed class Soldier(Node3D node, int faction, SoldierType type, float speed, float damage, float range, bool deployed, Vector2 formation)
+    private sealed class Crystal(Node3D node, Vector3 position, int owner, bool initial)
+    {
+        public Node3D Node { get; } = node;
+        public Vector3 Position { get; } = position;
+        public int Owner = owner;
+        public bool IsInitial { get; } = initial;
+        public int CaptureFaction = -1;
+        public float CaptureProgress;
+        public float SpawnClock;
+    }
+
+    private sealed class Soldier(Node3D node, int faction, Crystal origin, SoldierType type, float speed, float damage, float range, bool deployed, Vector2 formation)
     {
         public Node3D Node { get; } = node;
         public int Faction { get; } = faction;
+        public Crystal Origin { get; } = origin;
         public SoldierType Type { get; } = type;
         public float Speed { get; } = speed;
         public float Damage { get; } = damage;
@@ -120,7 +137,7 @@ public partial class NaiLongFight : Node3D
     private void BuildCamera()
     {
         _cameraPivot = new Node3D(); AddChild(_cameraPivot);
-        var camera = new Camera3D { Position = new Vector3(0, 48, 46), Fov = 54 };
+        var camera = new Camera3D { Position = new Vector3(0, 145, 132), Fov = 56 };
         _cameraPivot.AddChild(camera); camera.LookAt(Vector3.Zero);
     }
 
@@ -152,30 +169,57 @@ public partial class NaiLongFight : Node3D
     private void StartBattle()
     {
         foreach (var soldier in _units) soldier.Node.QueueFree();
-        _units.Clear(); _armies.Clear();
+        _units.Clear(); _armies.Clear(); _crystals.Clear();
         foreach (var marker in _markersRoot.GetChildren()) marker.QueueFree();
         GenerateTerrain(); _elapsed = 0; _spawnClock = 0; _running = true;
         int count = _count.GetSelectedId();
         for (int i = 0; i < count; i++)
         {
             float angle = Mathf.Tau * i / count - Mathf.Pi / 2;
-            float radius = _rng.RandfRange(23f, 28f);
+            float radius = _rng.RandfRange(48f, 56f);
             var home = new Vector3(Mathf.Cos(angle) * radius, 0, Mathf.Sin(angle) * radius);
             home.Y = HeightAt(home.X, home.Z);
             var tactic = (Tactic)_rng.RandiRange(0, 2);
             int rallyGoal = tactic == Tactic.WaveAttack ? _rng.RandiRange(5, 7) : _rng.RandiRange(9, 12);
-            _armies.Add(new Army(i, Names[i], Colors[i], home, tactic, rallyGoal)); AddMarker(home, Colors[i], Names[i]);
-            for (int troop = 0; troop < 6; troop++) SpawnSoldier(_armies[i]);
+            _armies.Add(new Army(i, Names[i], Colors[i], home, tactic, rallyGoal));
+            var homeCrystal = CreateCrystal(home, i, true);
+            for (int troop = 0; troop < 6; troop++) SpawnSoldier(_armies[i], homeCrystal);
         }
-        _status.Text = "势力正在集结 · 达到战术兵力后分批出击";
+        CreateNeutralCrystals(count * 2 + 4);
+        _status.Text = "势力围绕初始水晶集结 · 占领更多水晶来扩军";
     }
 
-    private void AddMarker(Vector3 position, Color color, string text)
+    private Crystal CreateCrystal(Vector3 position, int owner, bool initial)
     {
-        var mesh = new CylinderMesh { TopRadius = 1.35f, BottomRadius = 1.55f, Height = .1f };
-        var material = new StandardMaterial3D { AlbedoColor = color.Darkened(.5f), EmissionEnabled = true, Emission = color.Darkened(.35f) };
-        _markersRoot.AddChild(new MeshInstance3D { Mesh = mesh, Position = position + new Vector3(0, .06f, 0), MaterialOverride = material });
-        _markersRoot.AddChild(new Label3D { Text = text, Position = position + new Vector3(0, .3f, 0), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, FontSize = 48, Modulate = color });
+        var root = new Node3D { Position = position };
+        var baseMaterial = new StandardMaterial3D { AlbedoColor = new Color("#263341"), Metallic = .35f, Roughness = .4f };
+        root.AddChild(new MeshInstance3D { Name = "Pedestal", Mesh = new CylinderMesh { TopRadius = .8f, BottomRadius = 1.1f, Height = .3f }, Position = new Vector3(0, .15f, 0), MaterialOverride = baseMaterial });
+        var ownerColor = owner < 0 ? new Color("#d7e6ed") : Colors[owner];
+        var gemMaterial = new StandardMaterial3D { AlbedoColor = ownerColor, EmissionEnabled = true, Emission = ownerColor * .32f, Metallic = .18f, Roughness = .22f };
+        root.AddChild(new MeshInstance3D { Name = "Gem", Mesh = new SphereMesh { Radius = .72f, Height = 1.85f, RadialSegments = 6, Rings = 3 }, Position = new Vector3(0, 1.15f, 0), MaterialOverride = gemMaterial });
+        root.AddChild(new Label3D { Name = "Label", Text = initial ? $"{Names[owner]}\n初始水晶" : "中立水晶", Position = new Vector3(0, 2.25f, 0), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, FontSize = 30, Modulate = ownerColor });
+        _markersRoot.AddChild(root);
+        var crystal = new Crystal(root, position, owner, initial); _crystals.Add(crystal); return crystal;
+    }
+
+    private void CreateNeutralCrystals(int amount)
+    {
+        var placed = new List<Vector3>();
+        foreach (var army in _armies) placed.Add(army.Home);
+        for (int i = 0; i < amount; i++)
+        {
+            bool created = false;
+            for (int attempt = 0; attempt < 80 && !created; attempt++)
+            {
+                float x = _rng.RandfRange(-Arena * .72f, Arena * .72f);
+                float z = _rng.RandfRange(-Arena * .72f, Arena * .72f);
+                var p = new Vector3(x, HeightAt(x, z), z);
+                bool clear = true;
+                foreach (var other in placed) if (p.DistanceTo(other) < 18f) { clear = false; break; }
+                if (!clear) continue;
+                CreateCrystal(p, -1, false); placed.Add(p); created = true;
+            }
+        }
     }
 
     public override void _Process(double delta)
@@ -184,7 +228,7 @@ public partial class NaiLongFight : Node3D
         if (!_running) return;
         float dt = (float)delta; _elapsed += dt; _spawnClock += dt;
         if (_spawnClock >= .72f) { _spawnClock = 0; SpawnRound(); }
-        Simulate(dt); UpdateScore();
+        ProcessCrystals(dt); DecideStrategies(dt); Simulate(dt); CheckEliminations(); UpdateScore();
     }
 
     private void MoveCamera(float delta)
@@ -198,7 +242,7 @@ public partial class NaiLongFight : Node3D
         input = input.Normalized();
         var forward = -_cameraPivot.GlobalBasis.Z; forward.Y = 0; forward = forward.Normalized();
         var right = _cameraPivot.GlobalBasis.X; right.Y = 0; right = right.Normalized();
-        _cameraPivot.Position += (right * input.X + forward * input.Y) * 19f * delta;
+        _cameraPivot.Position += (right * input.X + forward * input.Y) * 28f * delta;
         _cameraPivot.Position = new Vector3(Mathf.Clamp(_cameraPivot.Position.X, -Arena * .8f, Arena * .8f), 0, Mathf.Clamp(_cameraPivot.Position.Z, -Arena * .8f, Arena * .8f));
     }
 
@@ -206,8 +250,15 @@ public partial class NaiLongFight : Node3D
     {
         foreach (var army in _armies)
         {
-            if (army.UnitCount >= 34) continue;
-            SpawnSoldier(army);
+            if (!army.Alive || army.UnitCount >= 48) continue;
+            foreach (var crystal in _crystals)
+            {
+                if (crystal.Owner != army.Id || army.UnitCount >= 48) continue;
+                crystal.SpawnClock += .72f;
+                if (crystal.SpawnClock < 1.44f) continue;
+                crystal.SpawnClock = 0;
+                SpawnSoldier(army, crystal);
+            }
             int waitingCount = 0;
             foreach (var unit in _units) if (unit.Faction == army.Id && !unit.Deployed) waitingCount++;
             if (waitingCount >= army.RallyGoal) ReleaseGroup(army);
@@ -231,23 +282,127 @@ public partial class NaiLongFight : Node3D
         army.LastLaunchedCount += available - defendersToKeep;
     }
 
-    private void SpawnSoldier(Army army)
+    private void SpawnSoldier(Army army, Crystal source)
     {
-        int slot = army.UnitCount;
+        int slot = 0;
+        foreach (var soldier in _units) if (ReferenceEquals(soldier.Origin, source)) slot++;
         int column = slot % 4;
         int row = slot / 4;
         var formation = new Vector2((column - 1.5f) * 1.05f, row * 1.0f);
-        var towardCenter = new Vector3(-army.Home.X, 0, -army.Home.Z).Normalized();
+        var towardCenter = new Vector3(-source.Position.X, 0, -source.Position.Z).Normalized();
         var lateral = new Vector3(-towardCenter.Z, 0, towardCenter.X);
-        var position = army.Home + lateral * formation.X - towardCenter * formation.Y;
+        var position = source.Position + lateral * formation.X - towardCenter * formation.Y;
         position.Y = HeightAt(position.X, position.Z);
         var type = (SoldierType)_rng.RandiRange(0, 3);
-        var soldier = MakeSoldier(army.Color, type); AddChild(soldier); soldier.Position = position;
+        var soldierNode = MakeSoldier(army.Color, type); AddChild(soldierNode); soldierNode.Position = position;
         float speed = type switch { SoldierType.Cavalry => 3.4f, SoldierType.Heavy => 1.45f, SoldierType.Archer => 1.85f, _ => 2.25f };
         float damage = type switch { SoldierType.Heavy => 1.8f, SoldierType.Archer => 1.25f, _ => 1f };
         float range = type switch { SoldierType.Archer => 5.5f, SoldierType.Cavalry => 1.55f, SoldierType.Heavy => 1.35f, _ => 1.45f };
         bool deployed = false;
-        _units.Add(new Soldier(soldier, army.Id, type, speed, damage, range, deployed, formation)); army.UnitCount++;
+        _units.Add(new Soldier(soldierNode, army.Id, source, type, speed, damage, range, deployed, formation)); army.UnitCount++;
+    }
+
+    private void ProcessCrystals(float delta)
+    {
+        foreach (var crystal in _crystals)
+        {
+            var pressure = new int[_armies.Count];
+            foreach (var soldier in _units)
+            {
+                if (soldier.Deployed && soldier.Hp > 0 && PlanarDistance(soldier.Node.Position, crystal.Position) < 4.6f)
+                    pressure[soldier.Faction]++;
+            }
+            int contender = -1, maximum = 0; bool tie = false;
+            for (int i = 0; i < pressure.Length; i++)
+            {
+                if (pressure[i] > maximum) { maximum = pressure[i]; contender = i; tie = false; }
+                else if (pressure[i] > 0 && pressure[i] == maximum) tie = true;
+            }
+            if (maximum == 0 || tie || contender == crystal.Owner)
+            {
+                crystal.CaptureFaction = -1; crystal.CaptureProgress = Mathf.Max(0, crystal.CaptureProgress - delta * .5f);
+                continue;
+            }
+            if (crystal.CaptureFaction != contender) { crystal.CaptureFaction = contender; crystal.CaptureProgress = 0; }
+            crystal.CaptureProgress += delta;
+            if (crystal.CaptureProgress < 4f) continue;
+            int oldOwner = crystal.Owner; crystal.Owner = contender; crystal.CaptureFaction = -1; crystal.CaptureProgress = 0;
+            RefreshCrystal(crystal);
+            _status.Text = $"{_armies[contender].Name} 占领了水晶！水晶开始为其出兵";
+            if (oldOwner >= 0) _armies[oldOwner].DecisionClock = 99;
+            _armies[contender].DecisionClock = 99;
+        }
+    }
+
+    private void RefreshCrystal(Crystal crystal)
+    {
+        var color = crystal.Owner < 0 ? new Color("#d7e6ed") : Colors[crystal.Owner];
+        var gem = crystal.Node.GetNode<MeshInstance3D>("Gem");
+        var material = new StandardMaterial3D { AlbedoColor = color, EmissionEnabled = true, Emission = color * .2f, Metallic = .18f, Roughness = .22f };
+        gem.MaterialOverride = material;
+        var label = crystal.Node.GetNode<Label3D>("Label");
+        label.Text = crystal.Owner < 0 ? "中立水晶" : $"{Names[crystal.Owner]}水晶";
+        label.Modulate = color;
+    }
+
+    private void DecideStrategies(float delta)
+    {
+        foreach (var army in _armies)
+        {
+            if (!army.Alive) continue;
+            army.DecisionClock += delta;
+            if (army.DecisionClock < 5f) continue;
+            army.DecisionClock = 0;
+            int owned = 0, available = 0;
+            foreach (var crystal in _crystals) { if (crystal.Owner == army.Id) owned++; else available++; }
+            bool threatened = false;
+            foreach (var crystal in _crystals)
+            {
+                if (crystal.Owner != army.Id) continue;
+                foreach (var soldier in _units)
+                {
+                    if (soldier.Faction != army.Id && PlanarDistance(soldier.Node.Position, crystal.Position) < 10f) { threatened = true; break; }
+                }
+                if (threatened) break;
+            }
+            float rivalAverage = 0; int rivals = 0;
+            foreach (var rival in _armies) if (rival.Alive && rival.Id != army.Id) { rivalAverage += rival.UnitCount; rivals++; }
+            if (rivals > 0) rivalAverage /= rivals;
+            if (threatened) army.CurrentStrategy = Strategy.DefendCrystal;
+            else if (rivalAverage > 0 && army.UnitCount < rivalAverage * .65f && owned > 0) army.CurrentStrategy = Strategy.Regroup;
+            else if (available > 0 && _rng.Randf() < (owned <= 1 ? .9f : .68f)) army.CurrentStrategy = Strategy.CaptureCrystals;
+            else army.CurrentStrategy = _rng.Randf() < .62f ? Strategy.AttackRival : Strategy.Regroup;
+        }
+    }
+
+    private void CheckEliminations()
+    {
+        foreach (var army in _armies)
+        {
+            if (!army.Alive) continue;
+            bool ownsCrystal = false;
+            foreach (var crystal in _crystals) if (crystal.Owner == army.Id) { ownsCrystal = true; break; }
+            if (ownsCrystal) continue;
+            army.Alive = false;
+            for (int i = _units.Count - 1; i >= 0; i--)
+            {
+                if (_units[i].Faction != army.Id) continue;
+                _units[i].Node.QueueFree(); _units.RemoveAt(i);
+            }
+        }
+        int alive = 0; Army? winner = null;
+        foreach (var army in _armies) if (army.Alive) { alive++; winner = army; }
+        if (alive <= 1)
+        {
+            _running = false;
+            _status.Text = alive == 1 ? $"战斗结束 · {winner!.Name} 占领了全部水晶" : "所有势力均已覆灭";
+        }
+    }
+
+    private static float PlanarDistance(Vector3 a, Vector3 b)
+    {
+        float dx = a.X - b.X, dz = a.Z - b.Z;
+        return Mathf.Sqrt(dx * dx + dz * dz);
     }
 
     private Node3D MakeSoldier(Color color, SoldierType type)
@@ -300,20 +455,27 @@ public partial class NaiLongFight : Node3D
                 if (separation.LengthSquared() > .001f)
                     unit.Node.Position += separation.Normalized() * delta * 1.5f;
             }
-            else if (nearest is not null)
+            else
             {
-                var target = nearest.Node.Position;
+                Vector3 target;
+                if (nearest is not null && nearestDistance < 7f && _armies[unit.Faction].CurrentStrategy is Strategy.AttackRival or Strategy.DefendCrystal)
+                    target = nearest.Node.Position;
+                else
+                {
+                    var objective = GetStrategicTarget(_armies[unit.Faction], unit);
+                    target = objective ?? nearest?.Node.Position ?? unit.Node.Position;
+                    if (objective is not null)
+                    {
+                        var radial = new Vector3(target.X, 0, target.Z).Normalized();
+                        var flank = new Vector3(-radial.Z, 0, radial.X);
+                        target += flank * unit.Formation.X * .55f - radial * Mathf.Min(unit.Formation.Y, 3f) * .5f;
+                    }
+                }
                 var travel = new Vector3(target.X - unit.Node.Position.X, 0, target.Z - unit.Node.Position.Z).Normalized();
-                var steering = travel + separation * 1.25f;
+                var steering = travel + separation * 1.3f;
                 if (steering.LengthSquared() > .001f) unit.Node.Position += steering.Normalized() * unit.Speed * delta;
                 unit.Node.Position = new Vector3(unit.Node.Position.X, HeightAt(unit.Node.Position.X, unit.Node.Position.Z), unit.Node.Position.Z);
                 unit.Node.LookAt(new Vector3(target.X, unit.Node.Position.Y, target.Z));
-            }
-            else
-            {
-                var towardCenter = new Vector3(-unit.Node.Position.X, 0, -unit.Node.Position.Z).Normalized();
-                unit.Node.Position += towardCenter * unit.Speed * delta;
-                unit.Node.Position = new Vector3(unit.Node.Position.X, HeightAt(unit.Node.Position.X, unit.Node.Position.Z), unit.Node.Position.Z);
             }
         }
         for (int i = _units.Count - 1; i >= 0; i--)
@@ -323,8 +485,35 @@ public partial class NaiLongFight : Node3D
         }
         foreach (var army in _armies) army.UnitCount = 0;
         foreach (var unit in _units) _armies[unit.Faction].UnitCount++;
-        int alive = 0; foreach (var army in _armies) if (army.UnitCount > 0) alive++;
-        if (alive <= 1) { _running = false; Army? winner = _armies.Find(a => a.UnitCount > 0); _status.Text = $"战斗结束 · {winner?.Name ?? "无人"} 获胜"; }
+    }
+
+    private Vector3? GetStrategicTarget(Army army, Soldier unit)
+    {
+        Crystal? best = null; float bestDistance = float.MaxValue;
+        foreach (var crystal in _crystals)
+        {
+            bool desired = army.CurrentStrategy switch
+            {
+                Strategy.CaptureCrystals => crystal.Owner != army.Id,
+                Strategy.AttackRival => crystal.Owner >= 0 && crystal.Owner != army.Id,
+                Strategy.DefendCrystal or Strategy.Regroup => crystal.Owner == army.Id,
+                _ => false
+            };
+            if (!desired) continue;
+            float distance = PlanarDistance(unit.Node.Position, crystal.Position);
+            if (distance < bestDistance) { best = crystal; bestDistance = distance; }
+        }
+        if (best is not null) return best.Position;
+        if (army.CurrentStrategy != Strategy.AttackRival)
+        {
+            foreach (var crystal in _crystals)
+            {
+                if (crystal.Owner != army.Id) continue;
+                float distance = PlanarDistance(unit.Node.Position, crystal.Position);
+                if (distance < bestDistance) { best = crystal; bestDistance = distance; }
+            }
+        }
+        return best?.Position;
     }
 
     private void UpdateScore()
@@ -344,10 +533,20 @@ public partial class NaiLongFight : Node3D
                     case SoldierType.Heavy: heavy++; break;
                 }
             }
-            string tactic = army.BattleTactic switch { Tactic.GatherAndCharge => "集结冲锋", Tactic.WaveAttack => "分波进攻", _ => "守点反击" };
-            lines.Add($"[color=#{army.Color.ToHtml(false)}]{army.Name}[/color]  {army.UnitCount}人 · {tactic} · 步{infantry}/弓{archers}/骑{cavalry}/重{heavy} · 击败{army.Kills}");
+            int ownedCrystals = 0;
+            foreach (var crystal in _crystals) if (crystal.Owner == army.Id) ownedCrystals++;
+            string strategy = army.CurrentStrategy switch
+            {
+                Strategy.CaptureCrystals => "争夺水晶",
+                Strategy.AttackRival => "攻击敌军",
+                Strategy.DefendCrystal => "防守水晶",
+                _ => "回防集结"
+            };
+            string state = army.Alive ? strategy : "已覆灭";
+            lines.Add($"{army.Name}  {state} · 水晶{ownedCrystals} · 兵{army.UnitCount}（步{infantry}/弓{archers}/骑{cavalry}/重{heavy}）· 击败{army.Kills}");
         }
-        _score.Text = string.Join("\n", lines) + $"\n\n战场时间  {(int)_elapsed / 60:00}:{(int)_elapsed % 60:00}";
+        int neutral = 0; foreach (var crystal in _crystals) if (crystal.Owner < 0) neutral++;
+        _score.Text = string.Join("\n", lines) + $"\n\n中立水晶 {neutral}  ·  战场时间  {(int)_elapsed / 60:00}:{(int)_elapsed % 60:00}";
     }
 
     public override void _UnhandledInput(InputEvent @event)
