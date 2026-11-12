@@ -63,10 +63,10 @@ public partial class NaiLongFight : Node3D
         _terrainRoot = new Node3D { Name = "Terrain" }; AddChild(_terrainRoot);
         _markersRoot = new Node3D { Name = "FactionMarkers" }; AddChild(_markersRoot);
         GenerateTerrain();
-        var environment = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = new Color("#1b2630"), AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = new Color("#f3f2df"), AmbientLightEnergy = .95f };
+        var environment = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = new Color("#18232b"), AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = new Color("#d8dfcf"), AmbientLightEnergy = .48f };
         AddChild(new WorldEnvironment { Environment = environment });
-        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-52, -25, 0), LightEnergy = 1.55f, ShadowEnabled = true });
-        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-35, 150, 0), LightEnergy = .62f, ShadowEnabled = false, LightColor = new Color("#b8d5eb") });
+        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-52, -25, 0), LightEnergy = .92f, ShadowEnabled = true });
+        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-35, 150, 0), LightEnergy = .16f, ShadowEnabled = false, LightColor = new Color("#afc7d8") });
     }
 
     private float HeightAt(float x, float z)
@@ -99,8 +99,8 @@ public partial class NaiLongFight : Node3D
             float slopeX = HeightAt(wx + normalStep, wz) - HeightAt(wx - normalStep, wz);
             float slopeZ = HeightAt(wx, wz + normalStep) - HeightAt(wx, wz - normalStep);
             normals[index] = new Vector3(-slopeX, normalStep * 2f, -slopeZ).Normalized();
-            float shade = _terrainNoise.GetNoise2D(wx * 1.9f, wz * 1.9f) * .07f;
-            Color baseColor = h > 2.0f ? new Color("#c2b894") : h < -1.5f ? new Color("#71908a") : new Color("#8cae78");
+            float shade = _terrainNoise.GetNoise2D(wx * 1.9f, wz * 1.9f) * .045f;
+            Color baseColor = h > 2.0f ? new Color("#837c67") : h < -1.5f ? new Color("#48645f") : new Color("#60794f");
             colors[index] = new Color(Mathf.Clamp(baseColor.R + shade, 0, 1), Mathf.Clamp(baseColor.G + shade, 0, 1), Mathf.Clamp(baseColor.B + shade, 0, 1));
             if (x == resolution || z == resolution) continue;
             int a = index, b = index + resolution + 1, c = index + 1, d = b + 1;
