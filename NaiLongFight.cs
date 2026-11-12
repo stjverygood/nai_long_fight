@@ -22,23 +22,33 @@ public partial class NaiLongFight : Node3D
     private float _elapsed;
     private float _spawnClock;
 
-    private sealed class Army(int id, string name, Color color, Vector3 home)
+    private enum SoldierType { Infantry, Archer, Cavalry, Heavy }
+    private enum Tactic { GatherAndCharge, WaveAttack, HoldAndCounter }
+
+    private sealed class Army(int id, string name, Color color, Vector3 home, Tactic tactic, int rallyGoal)
     {
         public int Id { get; } = id;
         public string Name { get; } = name;
         public Color Color { get; } = color;
         public Vector3 Home { get; } = home;
+        public Tactic BattleTactic { get; } = tactic;
+        public int RallyGoal { get; } = rallyGoal;
+        public int LastLaunchedCount;
         public int Kills;
         public int UnitCount;
     }
 
-    private sealed class Soldier(Node3D node, int faction, float speed, float phase)
+    private sealed class Soldier(Node3D node, int faction, SoldierType type, float speed, float damage, float range, bool deployed, Vector2 formation)
     {
         public Node3D Node { get; } = node;
         public int Faction { get; } = faction;
+        public SoldierType Type { get; } = type;
         public float Speed { get; } = speed;
-        public float Phase { get; } = phase;
-        public float Hp = 3f;
+        public float Damage { get; } = damage;
+        public float Range { get; } = range;
+        public Vector2 Formation { get; } = formation;
+        public bool Deployed = deployed;
+        public float Hp = 4f;
         public float Attack;
     }
 
@@ -53,9 +63,10 @@ public partial class NaiLongFight : Node3D
         _terrainRoot = new Node3D { Name = "Terrain" }; AddChild(_terrainRoot);
         _markersRoot = new Node3D { Name = "FactionMarkers" }; AddChild(_markersRoot);
         GenerateTerrain();
-        var environment = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = new Color("#070d14"), AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = new Color("#a9bed0"), AmbientLightEnergy = .45f };
+        var environment = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = new Color("#101821"), AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = new Color("#d8e4d5"), AmbientLightEnergy = .72f };
         AddChild(new WorldEnvironment { Environment = environment });
-        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-55, -25, 0), LightEnergy = 1.4f });
+        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-52, -25, 0), LightEnergy = 1.25f, ShadowEnabled = true });
+        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-35, 150, 0), LightEnergy = .38f, ShadowEnabled = false, LightColor = new Color("#9bb8d0") });
     }
 
     private float HeightAt(float x, float z)
@@ -84,7 +95,7 @@ public partial class NaiLongFight : Node3D
             int index = z * (resolution + 1) + x;
             vertices[index] = new Vector3(wx, h, wz);
             float shade = _terrainNoise.GetNoise2D(wx * 1.9f, wz * 1.9f) * .07f;
-            Color baseColor = h > 2.0f ? new Color("#827b69") : h < -1.5f ? new Color("#344b4a") : new Color("#49634b");
+            Color baseColor = h > 2.0f ? new Color("#a49a7f") : h < -1.5f ? new Color("#55726d") : new Color("#698765");
             colors[index] = new Color(Mathf.Clamp(baseColor.R + shade, 0, 1), Mathf.Clamp(baseColor.G + shade, 0, 1), Mathf.Clamp(baseColor.B + shade, 0, 1));
             if (x == resolution || z == resolution) continue;
             int a = index, b = index + resolution + 1, c = index + 1, d = b + 1;
@@ -109,7 +120,7 @@ public partial class NaiLongFight : Node3D
     private void BuildUi()
     {
         var layer = new CanvasLayer(); AddChild(layer);
-        var panel = new PanelContainer { Position = new Vector2(24, 24), CustomMinimumSize = new Vector2(330, 0) };
+        var panel = new PanelContainer { Position = new Vector2(24, 24), CustomMinimumSize = new Vector2(460, 0) };
         var style = new StyleBoxFlat { BgColor = new Color("#e8101822"), BorderColor = new Color("#405363"), ContentMarginLeft = 18, ContentMarginRight = 18, ContentMarginTop = 16, ContentMarginBottom = 16 };
         style.SetBorderWidthAll(1); style.SetCornerRadiusAll(12); panel.AddThemeStyleboxOverride("panel", style); layer.AddChild(panel);
         var box = new VBoxContainer { Theme = null }; box.AddThemeConstantOverride("separation", 12); panel.AddChild(box);
@@ -120,7 +131,7 @@ public partial class NaiLongFight : Node3D
         _count = new OptionButton(); for (int n = 2; n <= 8; n++) _count.AddItem($"{n} 支", n); _count.Select(2); row.AddChild(_count);
         var start = new Button { Text = "开始自动战斗", CustomMinimumSize = new Vector2(0, 42) }; start.Pressed += StartBattle; box.AddChild(start);
         _status = new Label { Text = "选择势力数量，开始后战斗将持续进行。", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _status.AddThemeColorOverride("font_color", new Color("#b3c2ce")); box.AddChild(_status);
-        _score = new Label(); box.AddChild(_score);
+        _score = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart }; _score.AddThemeFontSizeOverride("font_size", 13); box.AddChild(_score);
         var tip = new Label { Text = "拖动鼠标旋转视角 · 滚轮缩放 · 空格暂停/继续" }; tip.AddThemeFontSizeOverride("font_size", 12); tip.AddThemeColorOverride("font_color", new Color("#8296a5")); box.AddChild(tip);
     }
 
@@ -137,10 +148,12 @@ public partial class NaiLongFight : Node3D
             float radius = _rng.RandfRange(16.5f, 19.5f);
             var home = new Vector3(Mathf.Cos(angle) * radius, 0, Mathf.Sin(angle) * radius);
             home.Y = HeightAt(home.X, home.Z);
-            _armies.Add(new Army(i, Names[i], Colors[i], home)); AddMarker(home, Colors[i], Names[i]);
+            var tactic = (Tactic)_rng.RandiRange(0, 2);
+            int rallyGoal = tactic == Tactic.WaveAttack ? _rng.RandiRange(5, 7) : _rng.RandiRange(9, 12);
+            _armies.Add(new Army(i, Names[i], Colors[i], home, tactic, rallyGoal)); AddMarker(home, Colors[i], Names[i]);
             for (int troop = 0; troop < 6; troop++) SpawnSoldier(_armies[i]);
         }
-        _status.Text = "战斗进行中 · 各势力正在向战场中心推进";
+        _status.Text = "势力正在集结 · 达到战术兵力后分批出击";
     }
 
     private void AddMarker(Vector3 position, Color color, string text)
@@ -164,57 +177,105 @@ public partial class NaiLongFight : Node3D
         foreach (var army in _armies)
         {
             if (army.UnitCount >= 34) continue;
-            var direction = (new Vector3(-army.Home.X * .25f, 0, -army.Home.Z * .25f) - army.Home).Normalized();
-            var side = new Vector3(-direction.Z, 0, direction.X);
-            SpawnSoldier(army, side, direction);
+            SpawnSoldier(army);
+            int waitingCount = 0;
+            foreach (var unit in _units) if (unit.Faction == army.Id && !unit.Deployed) waitingCount++;
+            if (waitingCount >= army.RallyGoal) ReleaseGroup(army);
         }
     }
 
-    private void SpawnSoldier(Army army, Vector3 side = default, Vector3 direction = default)
+    private void ReleaseGroup(Army army)
     {
-        if (side == Vector3.Zero)
+        int defendersToKeep = army.BattleTactic == Tactic.HoldAndCounter ? 2 : 0;
+        int available = 0;
+        foreach (var soldier in _units) if (soldier.Faction == army.Id && !soldier.Deployed) available++;
+        int toRelease = Mathf.Max(0, available - defendersToKeep);
+        if (toRelease == 0) return;
+        foreach (var soldier in _units)
         {
-            direction = new Vector3(-army.Home.X, 0, -army.Home.Z).Normalized();
-            side = new Vector3(-direction.Z, 0, direction.X);
+            if (soldier.Faction != army.Id || soldier.Deployed) continue;
+            soldier.Deployed = true;
+            toRelease--;
+            if (toRelease <= 0) break;
         }
-        var position = army.Home + side * _rng.RandfRange(-2.7f, 2.7f) + direction * _rng.RandfRange(-.5f, 1.3f);
-        position.Y = HeightAt(position.X, position.Z);
-        var soldier = MakeSoldier(army.Color); AddChild(soldier); soldier.Position = position;
-        _units.Add(new Soldier(soldier, army.Id, _rng.RandfRange(1.8f, 2.5f), _rng.Randf() * Mathf.Tau)); army.UnitCount++;
+        army.LastLaunchedCount += available - defendersToKeep;
     }
 
-    private Node3D MakeSoldier(Color color)
+    private void SpawnSoldier(Army army)
     {
-        var root = new Node3D(); var material = new StandardMaterial3D { AlbedoColor = color, Metallic = .22f, Roughness = .4f, EmissionEnabled = true, Emission = color.Darkened(.75f) };
-        root.AddChild(new MeshInstance3D { Mesh = new CapsuleMesh { Radius = .27f, Height = .9f }, Position = new Vector3(0, .52f, 0), MaterialOverride = material });
-        root.AddChild(new MeshInstance3D { Mesh = new SphereMesh { Radius = .2f, Height = .4f }, Position = new Vector3(0, 1.08f, 0), MaterialOverride = material }); return root;
+        int slot = army.UnitCount;
+        int column = slot % 4;
+        int row = slot / 4;
+        var formation = new Vector2((column - 1.5f) * 1.05f, row * 1.0f);
+        var towardCenter = new Vector3(-army.Home.X, 0, -army.Home.Z).Normalized();
+        var lateral = new Vector3(-towardCenter.Z, 0, towardCenter.X);
+        var position = army.Home + lateral * formation.X - towardCenter * formation.Y;
+        position.Y = HeightAt(position.X, position.Z);
+        var type = (SoldierType)_rng.RandiRange(0, 3);
+        var soldier = MakeSoldier(army.Color, type); AddChild(soldier); soldier.Position = position;
+        float speed = type switch { SoldierType.Cavalry => 3.4f, SoldierType.Heavy => 1.45f, SoldierType.Archer => 1.85f, _ => 2.25f };
+        float damage = type switch { SoldierType.Heavy => 1.8f, SoldierType.Archer => 1.25f, _ => 1f };
+        float range = type switch { SoldierType.Archer => 5.5f, SoldierType.Cavalry => 1.55f, SoldierType.Heavy => 1.35f, _ => 1.45f };
+        bool deployed = false;
+        _units.Add(new Soldier(soldier, army.Id, type, speed, damage, range, deployed, formation)); army.UnitCount++;
+    }
+
+    private Node3D MakeSoldier(Color color, SoldierType type)
+    {
+        var root = new Node3D();
+        var material = new StandardMaterial3D { AlbedoColor = color, Metallic = .18f, Roughness = .48f, EmissionEnabled = true, Emission = color.Darkened(.72f) };
+        float radius = type switch { SoldierType.Heavy => .38f, SoldierType.Cavalry => .32f, SoldierType.Archer => .22f, _ => .27f };
+        float height = type switch { SoldierType.Heavy => 1.05f, SoldierType.Archer => .78f, _ => .9f };
+        root.AddChild(new MeshInstance3D { Mesh = new CapsuleMesh { Radius = radius, Height = height }, Position = new Vector3(0, height * .56f, 0), MaterialOverride = material });
+        root.AddChild(new MeshInstance3D { Mesh = new SphereMesh { Radius = radius * .72f, Height = radius * 1.44f }, Position = new Vector3(0, height + .05f, 0), MaterialOverride = material });
+        if (type == SoldierType.Cavalry)
+            root.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(.34f, .3f, .62f) }, Position = new Vector3(0, .38f, .18f), MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color("#5c382e"), Roughness = .8f } });
+        if (type == SoldierType.Archer)
+            root.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(.07f, .65f, .07f) }, Position = new Vector3(.3f, .65f, 0), RotationDegrees = new Vector3(0, 0, -18), MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color("#d8c28b") } });
+        if (type == SoldierType.Heavy)
+            root.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(.12f, .72f, .12f) }, Position = new Vector3(.37f, .62f, 0), MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color("#b6c1c7"), Metallic = .45f } });
+        return root;
     }
 
     private void Simulate(float delta)
     {
         for (int i = 0; i < _units.Count; i++)
         {
-            var unit = _units[i]; float nearestDistance = float.MaxValue; Soldier? nearest = null;
+            var unit = _units[i];
+            if (!unit.Deployed) continue;
+            float nearestDistance = float.MaxValue; Soldier? nearest = null;
+            var separation = Vector3.Zero;
             foreach (var other in _units)
             {
-                if (other.Faction == unit.Faction) continue;
-                float distance = unit.Node.Position.DistanceTo(other.Node.Position);
-                if (distance < nearestDistance) { nearestDistance = distance; nearest = other; }
+                if (ReferenceEquals(other, unit)) continue;
+                var offset = unit.Node.Position - other.Node.Position;
+                offset.Y = 0;
+                float distance = offset.Length();
+                if (other.Faction == unit.Faction)
+                {
+                    if (distance > .001f && distance < 1.35f) separation += offset.Normalized() * (1.35f - distance);
+                    continue;
+                }
+                if (other.Hp > 0 && distance < nearestDistance) { nearestDistance = distance; nearest = other; }
             }
-            if (nearest is not null && nearestDistance < 1.5f)
+            if (nearest is not null && nearestDistance <= unit.Range)
             {
                 unit.Attack -= delta;
                 if (unit.Attack <= 0)
                 {
-                    unit.Attack = _rng.RandfRange(.55f, .9f); nearest.Hp -= 1;
+                    unit.Attack = unit.Type == SoldierType.Archer ? _rng.RandfRange(.9f, 1.2f) : _rng.RandfRange(.55f, .9f);
+                    nearest.Hp -= unit.Damage;
                     if (nearest.Hp <= 0) _armies[unit.Faction].Kills++;
                 }
+                if (separation.LengthSquared() > .001f)
+                    unit.Node.Position += separation.Normalized() * delta * 1.5f;
             }
             else if (nearest is not null)
             {
                 var target = nearest.Node.Position;
                 var travel = new Vector3(target.X - unit.Node.Position.X, 0, target.Z - unit.Node.Position.Z).Normalized();
-                unit.Node.Position += travel * unit.Speed * delta;
+                var steering = travel + separation * 1.25f;
+                if (steering.LengthSquared() > .001f) unit.Node.Position += steering.Normalized() * unit.Speed * delta;
                 unit.Node.Position = new Vector3(unit.Node.Position.X, HeightAt(unit.Node.Position.X, unit.Node.Position.Z), unit.Node.Position.Z);
                 unit.Node.LookAt(new Vector3(target.X, unit.Node.Position.Y, target.Z));
             }
@@ -238,7 +299,24 @@ public partial class NaiLongFight : Node3D
 
     private void UpdateScore()
     {
-        var lines = new List<string>(); foreach (var army in _armies) lines.Add($"[color=#{army.Color.ToHtml(false)}]{army.Name}[/color]  {army.UnitCount} 人  ·  击败 {army.Kills}");
+        var lines = new List<string>();
+        foreach (var army in _armies)
+        {
+            int infantry = 0, archers = 0, cavalry = 0, heavy = 0;
+            foreach (var soldier in _units)
+            {
+                if (soldier.Faction != army.Id) continue;
+                switch (soldier.Type)
+                {
+                    case SoldierType.Infantry: infantry++; break;
+                    case SoldierType.Archer: archers++; break;
+                    case SoldierType.Cavalry: cavalry++; break;
+                    case SoldierType.Heavy: heavy++; break;
+                }
+            }
+            string tactic = army.BattleTactic switch { Tactic.GatherAndCharge => "集结冲锋", Tactic.WaveAttack => "分波进攻", _ => "守点反击" };
+            lines.Add($"[color=#{army.Color.ToHtml(false)}]{army.Name}[/color]  {army.UnitCount}人 · {tactic} · 步{infantry}/弓{archers}/骑{cavalry}/重{heavy} · 击败{army.Kills}");
+        }
         _score.Text = string.Join("\n", lines) + $"\n\n战场时间  {(int)_elapsed / 60:00}:{(int)_elapsed % 60:00}";
     }
 
