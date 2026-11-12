@@ -3,3 +3,4 @@ bin/
 obj/
 build/
 *.slnx
+export.log
