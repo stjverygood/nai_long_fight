@@ -58,6 +58,9 @@ public partial class NaiLongFight : Node3D
         public float CaptureProgress;
         public float SpawnClock;
         public int NearbyFactionCount;
+        public Node3D ProgressRoot = null!;
+        public MeshInstance3D ProgressFill = null!;
+        public int ProgressMaterialFaction = -2;
     }
 
     private sealed class Soldier(Node3D node, int faction, Crystal origin, SoldierType type, float speed, float damage, float range, float visionRange, bool deployed, Vector2 formation, Vector3 scoutTarget)
@@ -107,7 +110,7 @@ public partial class NaiLongFight : Node3D
         foreach (var child in _terrainRoot.GetChildren()) child.QueueFree();
         _terrainNoise.Seed = (int)_rng.Randi(); _terrainNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Simplex;
         _terrainNoise.Frequency = .045f; _terrainNoise.FractalOctaves = 4; _terrainNoise.FractalLacunarity = 2.1f;
-        const int resolution = 160;
+        const int resolution = 224;
         var vertices = new Vector3[(resolution + 1) * (resolution + 1)];
         var normals = new Vector3[vertices.Length];
         var colors = new Color[vertices.Length];
@@ -152,9 +155,17 @@ public partial class NaiLongFight : Node3D
     private void BuildUi()
     {
         var layer = new CanvasLayer(); AddChild(layer);
-        var panel = new PanelContainer { Position = new Vector2(24, 66), CustomMinimumSize = new Vector2(460, 0) };
-        var style = new StyleBoxFlat { BgColor = new Color("#e8101822"), BorderColor = new Color("#405363"), ContentMarginLeft = 18, ContentMarginRight = 18, ContentMarginTop = 16, ContentMarginBottom = 16 };
+        var panel = new PanelContainer { Position = new Vector2(24, 66), CustomMinimumSize = new Vector2(500, 0) };
+        var style = new StyleBoxFlat { BgColor = new Color("#f0141c25"), BorderColor = new Color("#71899a"), ContentMarginLeft = 20, ContentMarginRight = 20, ContentMarginTop = 18, ContentMarginBottom = 18 };
         style.SetBorderWidthAll(1); style.SetCornerRadiusAll(12); panel.AddThemeStyleboxOverride("panel", style); layer.AddChild(panel);
+        var theme = new Theme();
+        theme.SetColor("font_color", "Label", new Color("#f4f7fa"));
+        theme.SetColor("font_hover_color", "Button", new Color("#ffffff"));
+        theme.SetColor("font_color", "Button", new Color("#ffffff"));
+        theme.SetColor("font_pressed_color", "Button", new Color("#dce8f0"));
+        theme.SetFontSize("font_size", "Label", 17);
+        theme.SetFontSize("font_size", "Button", 17);
+        panel.Theme = theme;
         var toggle = new Button { Text = "收起面板  ▴", Position = new Vector2(24, 24), CustomMinimumSize = new Vector2(126, 34) };
         toggle.Pressed += () =>
         {
@@ -163,15 +174,15 @@ public partial class NaiLongFight : Node3D
         };
         layer.AddChild(toggle);
         var box = new VBoxContainer { Theme = null }; box.AddThemeConstantOverride("separation", 12); panel.AddChild(box);
-        var title = new Label { Text = "LONG FIGHT  /  自动战场" }; title.AddThemeFontSizeOverride("font_size", 23); box.AddChild(title);
-        var subtitle = new Label { Text = "势力自行扩军、遭遇与争夺战场" }; subtitle.AddThemeColorOverride("font_color", new Color("#9aafbe")); box.AddChild(subtitle);
+        var title = new Label { Text = "LONG FIGHT  /  自动战场" }; title.AddThemeFontSizeOverride("font_size", 27); title.AddThemeColorOverride("font_color", new Color("#ffffff")); box.AddChild(title);
+        var subtitle = new Label { Text = "势力自行扩军、遭遇与争夺战场" }; subtitle.AddThemeFontSizeOverride("font_size", 18); subtitle.AddThemeColorOverride("font_color", new Color("#c5d4df")); box.AddChild(subtitle);
         var row = new HBoxContainer(); box.AddChild(row);
         row.AddChild(new Label { Text = "参战势力", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
         _count = new OptionButton(); for (int n = 2; n <= 8; n++) _count.AddItem($"{n} 支", n); _count.Select(2); row.AddChild(_count);
-        var start = new Button { Text = "开始自动战斗", CustomMinimumSize = new Vector2(0, 42) }; start.Pressed += StartBattle; box.AddChild(start);
-        _status = new Label { Text = "选择势力数量，开始后战斗将持续进行。", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _status.AddThemeColorOverride("font_color", new Color("#b3c2ce")); box.AddChild(_status);
-        _score = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart }; _score.AddThemeFontSizeOverride("font_size", 13); box.AddChild(_score);
-        var tip = new Label { Text = "WASD 移动视角 · 拖动旋转 · 滚轮缩放 · 空格暂停" }; tip.AddThemeFontSizeOverride("font_size", 12); tip.AddThemeColorOverride("font_color", new Color("#8296a5")); box.AddChild(tip);
+        var start = new Button { Text = "开始自动战斗", CustomMinimumSize = new Vector2(0, 48) }; start.AddThemeFontSizeOverride("font_size", 19); start.Pressed += StartBattle; box.AddChild(start);
+        _status = new Label { Text = "选择势力数量，开始后战斗将持续进行。", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _status.AddThemeColorOverride("font_color", new Color("#e3ebf1")); box.AddChild(_status);
+        _score = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart }; _score.AddThemeFontSizeOverride("font_size", 16); _score.AddThemeColorOverride("font_color", new Color("#f2f5f7")); box.AddChild(_score);
+        var tip = new Label { Text = "WASD 移动视角 · 拖动旋转 · 滚轮缩放 · 空格暂停" }; tip.AddThemeFontSizeOverride("font_size", 14); tip.AddThemeColorOverride("font_color", new Color("#b8c7d2")); box.AddChild(tip);
     }
 
     private void StartBattle()
@@ -206,9 +217,16 @@ public partial class NaiLongFight : Node3D
         var ownerColor = owner < 0 ? new Color("#d7e6ed") : Colors[owner];
         var gemMaterial = new StandardMaterial3D { AlbedoColor = ownerColor, EmissionEnabled = true, Emission = ownerColor * .08f, Metallic = .18f, Roughness = .22f };
         root.AddChild(new MeshInstance3D { Name = "Gem", Mesh = new SphereMesh { Radius = 1.1f, Height = 3.6f, RadialSegments = 5, Rings = 2 }, Position = new Vector3(0, 2.05f, 0), MaterialOverride = gemMaterial });
-        root.AddChild(new Label3D { Name = "Label", Text = initial ? $"{Names[owner]}\n初始水晶" : "中立水晶", Position = new Vector3(0, 4.0f, 0), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, FontSize = 34, Modulate = ownerColor });
+        root.AddChild(new Label3D { Name = "Label", Text = initial ? $"{Names[owner]}\n初始水晶" : "中立水晶", Position = new Vector3(0, 5.15f, 0), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, FontSize = 42, OutlineSize = 10, OutlineModulate = new Color("#101820"), Modulate = new Color("#ffffff") });
         _markersRoot.AddChild(root);
-        var crystal = new Crystal(root, _crystals.Count, position, owner, initial); _crystals.Add(crystal); return crystal;
+        var crystal = new Crystal(root, _crystals.Count, position, owner, initial);
+        var progressRoot = new Node3D { Name = "CaptureProgress", Position = new Vector3(0, 4.35f, 0), Visible = false };
+        root.AddChild(progressRoot);
+        progressRoot.AddChild(new MeshInstance3D { Name = "Track", Mesh = new BoxMesh { Size = new Vector3(4.8f, .34f, .16f) }, MaterialOverride = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = new Color("#111923") } });
+        crystal.ProgressFill = new MeshInstance3D { Name = "Fill", Mesh = new BoxMesh { Size = new Vector3(4.58f, .22f, .2f) }, MaterialOverride = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = ownerColor } };
+        progressRoot.AddChild(crystal.ProgressFill);
+        crystal.ProgressRoot = progressRoot;
+        _crystals.Add(crystal); return crystal;
     }
 
     private void CreateNeutralCrystals(int amount)
@@ -234,6 +252,7 @@ public partial class NaiLongFight : Node3D
     public override void _Process(double delta)
     {
         MoveCamera((float)delta);
+        UpdateProgressBars();
         if (!_running) return;
         float dt = (float)delta; _elapsed += dt; _spawnClock += dt;
         if (_spawnClock >= .72f) { _spawnClock = 0; SpawnRound(); }
@@ -376,9 +395,33 @@ public partial class NaiLongFight : Node3D
         var label = crystal.Node.GetNode<Label3D>("Label");
         string ownerText = crystal.Owner < 0 ? "中立水晶" : $"{Names[crystal.Owner]}水晶";
         if (contested) label.Text = "争夺中 · 占领暂停";
-        else if (crystal.CaptureProgress > 0 && crystal.CaptureFaction >= 0)
-            label.Text = $"{ownerText}\n{Names[crystal.CaptureFaction]}占领 {Mathf.RoundToInt(crystal.CaptureProgress / 7f * 100)}%";
         else label.Text = ownerText;
+        bool showBar = crystal.CaptureProgress > 0 && crystal.CaptureFaction >= 0;
+        crystal.ProgressRoot.Visible = showBar;
+        if (!showBar) return;
+        if (crystal.ProgressMaterialFaction != crystal.CaptureFaction)
+        {
+            var factionColor = Colors[crystal.CaptureFaction];
+            crystal.ProgressFill.MaterialOverride = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = factionColor, EmissionEnabled = true, Emission = factionColor * .28f };
+            crystal.ProgressMaterialFaction = crystal.CaptureFaction;
+        }
+        float progress = Mathf.Clamp(crystal.CaptureProgress / 7f, 0, 1);
+        crystal.ProgressFill.Scale = new Vector3(progress, 1, 1);
+        crystal.ProgressFill.Position = new Vector3(-2.29f * (1f - progress), 0, .03f);
+    }
+
+    private void UpdateProgressBars()
+    {
+        var camera = GetViewport().GetCamera3D();
+        if (camera == null) return;
+        foreach (var crystal in _crystals)
+        {
+            if (!crystal.ProgressRoot.Visible) continue;
+            var towardCamera = camera.GlobalPosition - crystal.ProgressRoot.GlobalPosition;
+            towardCamera.Y = 0;
+            if (towardCamera.LengthSquared() < .001f) continue;
+            crystal.ProgressRoot.GlobalRotation = new Vector3(0, Mathf.Atan2(towardCamera.X, towardCamera.Z), 0);
+        }
     }
 
     private void DecideStrategies(float delta)
