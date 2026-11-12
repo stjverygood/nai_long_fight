@@ -17,6 +17,7 @@ godot --headless --path . --export-release "Windows Desktop" build/NaiLongFight.
 - 选择势力数量后点击「开始自动战斗」
 - 空格：暂停 / 继续
 - 按住鼠标左键拖动：旋转视角
+- WASD：移动视角
 - 鼠标滚轮：缩放
 
 士兵数达到每个势力 34 人后会停止继续增援；战斗持续到只剩一个势力存活。

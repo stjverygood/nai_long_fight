@@ -6,7 +6,7 @@ public partial class NaiLongFight : Node3D
 {
     private static readonly Color[] Colors = [new("#ff5d73"), new("#55a7ff"), new("#ffc857"), new("#68e0a3"), new("#b889ff"), new("#ff914d"), new("#55d8d0"), new("#f47cc4")];
     private static readonly string[] Names = ["赤焰", "苍蓝", "金戈", "青岚", "紫霄", "烈阳", "碧海", "绯月"];
-    private const float Arena = 24f;
+    private const float Arena = 32f;
     private readonly List<Army> _armies = [];
     private readonly List<Soldier> _units = [];
     private readonly RandomNumberGenerator _rng = new();
@@ -63,10 +63,10 @@ public partial class NaiLongFight : Node3D
         _terrainRoot = new Node3D { Name = "Terrain" }; AddChild(_terrainRoot);
         _markersRoot = new Node3D { Name = "FactionMarkers" }; AddChild(_markersRoot);
         GenerateTerrain();
-        var environment = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = new Color("#101821"), AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = new Color("#d8e4d5"), AmbientLightEnergy = .72f };
+        var environment = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = new Color("#1b2630"), AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = new Color("#f3f2df"), AmbientLightEnergy = .95f };
         AddChild(new WorldEnvironment { Environment = environment });
-        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-52, -25, 0), LightEnergy = 1.25f, ShadowEnabled = true });
-        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-35, 150, 0), LightEnergy = .38f, ShadowEnabled = false, LightColor = new Color("#9bb8d0") });
+        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-52, -25, 0), LightEnergy = 1.55f, ShadowEnabled = true });
+        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-35, 150, 0), LightEnergy = .62f, ShadowEnabled = false, LightColor = new Color("#b8d5eb") });
     }
 
     private float HeightAt(float x, float z)
@@ -95,7 +95,7 @@ public partial class NaiLongFight : Node3D
             int index = z * (resolution + 1) + x;
             vertices[index] = new Vector3(wx, h, wz);
             float shade = _terrainNoise.GetNoise2D(wx * 1.9f, wz * 1.9f) * .07f;
-            Color baseColor = h > 2.0f ? new Color("#a49a7f") : h < -1.5f ? new Color("#55726d") : new Color("#698765");
+            Color baseColor = h > 2.0f ? new Color("#c2b894") : h < -1.5f ? new Color("#71908a") : new Color("#8cae78");
             colors[index] = new Color(Mathf.Clamp(baseColor.R + shade, 0, 1), Mathf.Clamp(baseColor.G + shade, 0, 1), Mathf.Clamp(baseColor.B + shade, 0, 1));
             if (x == resolution || z == resolution) continue;
             int a = index, b = index + resolution + 1, c = index + 1, d = b + 1;
@@ -113,7 +113,7 @@ public partial class NaiLongFight : Node3D
     private void BuildCamera()
     {
         _cameraPivot = new Node3D(); AddChild(_cameraPivot);
-        var camera = new Camera3D { Position = new Vector3(0, 33, 32), Fov = 52 };
+        var camera = new Camera3D { Position = new Vector3(0, 48, 46), Fov = 54 };
         _cameraPivot.AddChild(camera); camera.LookAt(Vector3.Zero);
     }
 
@@ -132,7 +132,7 @@ public partial class NaiLongFight : Node3D
         var start = new Button { Text = "开始自动战斗", CustomMinimumSize = new Vector2(0, 42) }; start.Pressed += StartBattle; box.AddChild(start);
         _status = new Label { Text = "选择势力数量，开始后战斗将持续进行。", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _status.AddThemeColorOverride("font_color", new Color("#b3c2ce")); box.AddChild(_status);
         _score = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart }; _score.AddThemeFontSizeOverride("font_size", 13); box.AddChild(_score);
-        var tip = new Label { Text = "拖动鼠标旋转视角 · 滚轮缩放 · 空格暂停/继续" }; tip.AddThemeFontSizeOverride("font_size", 12); tip.AddThemeColorOverride("font_color", new Color("#8296a5")); box.AddChild(tip);
+        var tip = new Label { Text = "WASD 移动视角 · 拖动旋转 · 滚轮缩放 · 空格暂停" }; tip.AddThemeFontSizeOverride("font_size", 12); tip.AddThemeColorOverride("font_color", new Color("#8296a5")); box.AddChild(tip);
     }
 
     private void StartBattle()
@@ -145,7 +145,7 @@ public partial class NaiLongFight : Node3D
         for (int i = 0; i < count; i++)
         {
             float angle = Mathf.Tau * i / count - Mathf.Pi / 2;
-            float radius = _rng.RandfRange(16.5f, 19.5f);
+            float radius = _rng.RandfRange(23f, 28f);
             var home = new Vector3(Mathf.Cos(angle) * radius, 0, Mathf.Sin(angle) * radius);
             home.Y = HeightAt(home.X, home.Z);
             var tactic = (Tactic)_rng.RandiRange(0, 2);
@@ -166,10 +166,26 @@ public partial class NaiLongFight : Node3D
 
     public override void _Process(double delta)
     {
+        MoveCamera((float)delta);
         if (!_running) return;
         float dt = (float)delta; _elapsed += dt; _spawnClock += dt;
         if (_spawnClock >= .72f) { _spawnClock = 0; SpawnRound(); }
         Simulate(dt); UpdateScore();
+    }
+
+    private void MoveCamera(float delta)
+    {
+        var input = Vector2.Zero;
+        if (Input.IsKeyPressed(Key.A)) input.X -= 1;
+        if (Input.IsKeyPressed(Key.D)) input.X += 1;
+        if (Input.IsKeyPressed(Key.W)) input.Y += 1;
+        if (Input.IsKeyPressed(Key.S)) input.Y -= 1;
+        if (input == Vector2.Zero) return;
+        input = input.Normalized();
+        var forward = -_cameraPivot.GlobalBasis.Z; forward.Y = 0; forward = forward.Normalized();
+        var right = _cameraPivot.GlobalBasis.X; right.Y = 0; right = right.Normalized();
+        _cameraPivot.Position += (right * input.X + forward * input.Y) * 19f * delta;
+        _cameraPivot.Position = new Vector3(Mathf.Clamp(_cameraPivot.Position.X, -Arena * .8f, Arena * .8f), 0, Mathf.Clamp(_cameraPivot.Position.Z, -Arena * .8f, Arena * .8f));
     }
 
     private void SpawnRound()
